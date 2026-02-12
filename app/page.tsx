@@ -10,6 +10,181 @@ import {
 } from "lucide-react";
 
 // --- COMPONENTES AUXILIARES ---
+const SnakeGame = () => {
+    const GRID_SIZE = 20;
+    const SPEED = 150;
+    
+    const [snake, setSnake] = useState<{x: number, y: number}[]>([{ x: 10, y: 10 }]);
+    const [food, setFood] = useState({ x: 15, y: 5 });
+    const [direction, setDirection] = useState({ x: 0, y: 0 });
+    const [gameOver, setGameOver] = useState(false);
+    const [score, setScore] = useState(0);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [highScore, setHighScore] = useState(0);
+    
+    
+    const directionRef = useRef({ x: 0, y: 0 });
+    const isPlayingRef = useRef(false);
+  
+    
+    useEffect(() => { directionRef.current = direction; }, [direction]);
+    useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  
+    const generateFood = (currentSnake: {x: number, y: number}[]) => {
+      let newFood: { x: number, y: number }; 
+      while (true) {
+        newFood = {
+          x: Math.floor(Math.random() * GRID_SIZE),
+          y: Math.floor(Math.random() * GRID_SIZE)
+        };
+        const onSnake = currentSnake.some(seg => seg.x === newFood.x && seg.y === newFood.y);
+        if (!onSnake) break;
+      }
+      return newFood;
+    };
+  
+    const resetGame = () => {
+      setSnake([{ x: 10, y: 10 }]);
+      setFood(generateFood([{ x: 10, y: 10 }]));
+      setDirection({ x: 1, y: 0 });
+      setGameOver(false);
+      setScore(0);
+      setIsPlaying(true);
+    };
+  
+    // --- CONTROLES (Global Window Listener) ---
+    useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        // Só captura as teclas se o jogo estiver rodando
+        if (!isPlayingRef.current) return;
+  
+        const keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+        if (keys.includes(e.key)) {
+          e.preventDefault(); // Impede a página de rolar
+        }
+  
+        const currentDir = directionRef.current;
+        
+        switch (e.key) {
+          case "ArrowUp":
+            if (currentDir.y !== 1) setDirection({ x: 0, y: -1 });
+            break;
+          case "ArrowDown":
+            if (currentDir.y !== -1) setDirection({ x: 0, y: 1 });
+            break;
+          case "ArrowLeft":
+            if (currentDir.x !== 1) setDirection({ x: -1, y: 0 });
+            break;
+          case "ArrowRight":
+            if (currentDir.x !== -1) setDirection({ x: 1, y: 0 });
+            break;
+        }
+      };
+  
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }, []); // Array vazio: o listener usa as Refs para ver o estado atual
+  
+    // --- GAME LOOP ---
+    useEffect(() => {
+      if (!isPlaying || gameOver) return;
+  
+      const moveSnake = () => {
+        setSnake((prevSnake) => {
+          const newHead = {
+            x: prevSnake[0].x + directionRef.current.x,
+            y: prevSnake[0].y + directionRef.current.y
+          };
+  
+          // Colisão com Parede
+          if (
+            newHead.x < 0 || newHead.x >= GRID_SIZE || 
+            newHead.y < 0 || newHead.y >= GRID_SIZE
+          ) {
+            setGameOver(true);
+            setIsPlaying(false);
+            if (score > highScore) setHighScore(score);
+            return prevSnake;
+          }
+  
+          // Colisão com Próprio Corpo
+          if (prevSnake.some(seg => seg.x === newHead.x && seg.y === newHead.y)) {
+            setGameOver(true);
+            setIsPlaying(false);
+            if (score > highScore) setHighScore(score);
+            return prevSnake;
+          }
+  
+          const newSnake = [newHead, ...prevSnake];
+  
+          // Comer Comida
+          if (newHead.x === food.x && newHead.y === food.y) {
+            setScore(s => s + 10);
+            setFood(generateFood(newSnake));
+          } else {
+            newSnake.pop(); 
+          }
+  
+          return newSnake;
+        });
+      };
+  
+      const gameInterval = setInterval(moveSnake, SPEED);
+      return () => clearInterval(gameInterval);
+    }, [isPlaying, gameOver, food, highScore, score]);
+  
+    return (
+      <div className="w-full max-w-md mx-auto p-6 bg-[#111] border border-white/10 rounded-xl font-mono">
+        <div className="flex justify-between items-end mb-6">
+            <div>
+                <h3 className="text-white font-bold text-xl">Retro Snake</h3>
+                <p className="text-xs text-[#666] mt-1">{gameOver ? "Game Over" : isPlaying ? "Use Arrow Keys" : "Press Start"}</p>
+            </div>
+            <div className="text-right">
+                <span className="text-xs text-[#444] block uppercase tracking-widest">High Score</span>
+                <span className="text-xl font-bold text-white">{highScore}</span>
+            </div>
+        </div>
+  
+        <div 
+          className="relative aspect-square w-full bg-[#0a0a0a] border border-white/5 rounded-lg overflow-hidden grid"
+          style={{
+              gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
+              gridTemplateRows: `repeat(${GRID_SIZE}, 1fr)`
+          }}
+        >
+          {gameOver && (
+             <div className="absolute inset-0 z-20 bg-black/80 flex flex-col items-center justify-center">
+                <span className="text-red-500 font-bold text-2xl mb-2">GAME OVER</span>
+                <span className="text-white text-sm mb-6">Score: {score}</span>
+                <button onClick={resetGame} className="px-6 py-2 bg-white text-black font-bold uppercase text-xs tracking-widest hover:bg-gray-200">Try Again</button>
+             </div>
+          )}
+          
+          {!isPlaying && !gameOver && (
+             <div className="absolute inset-0 z-20 bg-black/60 flex items-center justify-center">
+                <button onClick={resetGame} className="px-8 py-3 bg-white text-black font-bold uppercase text-xs tracking-widest hover:bg-gray-200 animate-pulse">Start Game</button>
+             </div>
+          )}
+  
+          {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, i) => {
+            const x = i % GRID_SIZE;
+            const y = Math.floor(i / GRID_SIZE);
+            const isFood = food.x === x && food.y === y;
+            const isSnake = snake.some(s => s.x === x && s.y === y);
+            const isHead = snake[0].x === x && snake[0].y === y;
+            
+            let cellClass = "";
+            if (isFood) cellClass = "bg-red-500 rounded-full scale-75 shadow-[0_0_10px_rgba(239,68,68,0.5)]";
+            if (isSnake) cellClass = "bg-green-500/80 border border-[#0a0a0a]";
+            if (isHead) cellClass = "bg-green-400 z-10";
+  
+            return <div key={i} className={`w-full h-full ${cellClass}`}></div>;
+          })}
+        </div>
+      </div>
+    );
+  };
 const TechQuiz = () => {
     const [currentQuestion, setCurrentQuestion] = useState(0);
     const [score, setScore] = useState(0);
@@ -544,6 +719,23 @@ export default function Home() {
                                 <p className="text-lg text-[#888] leading-relaxed max-w-md ml-auto">
                                     Validating backend concepts and architecture patterns. Test your knowledge against these technical interview questions.
                                 </p>
+                            </div>
+                        </div>
+                    </section>
+                    
+                    <section id="snake" className="mb-48 scroll-mt-24">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                            <div>
+                                <h2 className="text-5xl md:text-7xl font-bold text-white font-sans mb-8 tracking-tight">
+                                    Classic <br />
+                                    <span className="text-[#444]">Revival</span>
+                                </h2>
+                                <p className="text-lg text-[#888] leading-relaxed max-w-md">
+                                    Take a breather from the tech stack. Use your arrow keys to navigate, collect the data points (red), and avoid the stack overflow (walls).
+                                </p>
+                            </div>
+                            <div className="flex justify-center lg:justify-end">
+                                <SnakeGame />
                             </div>
                         </div>
                     </section>
